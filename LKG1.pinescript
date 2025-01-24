@@ -1,0 +1,728 @@
+//@version=5
+indicator("LKG 1.0", overlay=true, max_bars_back = 5000, max_lines_count = 500, max_boxes_count = 5000, max_labels_count = 500)
+
+//-----------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+//stoploss atr
+mult456 = 2.5
+src456 = close
+lenght456 = input(14,"Lenght")
+atr456 = ta.atr(lenght456)
+ratio = atr456/close*100*mult456+40000
+
+longstoploss_level = open-atr456*(mult456)
+shortstoploss_level = open+atr456*(mult456)
+
+bcolor = if high > shortstoploss_level or low < longstoploss_level
+    color.yellow
+
+barcolor(bcolor,title="Fail Bars")
+
+
+
+
+//ADX
+lensig = input.int(14, title ="ADX Smoothing", minval = 1, maxval = 50)
+len2 = input.int(14, minval = 1, title = "DI Length")
+
+up = ta.change(high)
+down = -ta.change(low)
+
+plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+
+trur = ta.rma(ta.tr, len2)
+plus = fixnan(100 * ta.rma(plusDM, len2) / trur)
+minus = fixnan(100 * ta.rma(minusDM, len2) / trur)
+
+sum = plus + minus
+adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), lensig)
+
+
+
+//RSI
+ma(source, length, type) =>
+    switch type
+        "SMA" => ta.sma(source, length)
+        "Bollinger Bands" => ta.sma(source, length)
+        "EMA" => ta.ema(source, length)
+        "SMMA (RMA)" => ta.rma(source, length)
+        "WMA" => ta.wma(source, length)
+        "VWMA" => ta.vwma(source, length)
+
+rsiLengthInput = input.int(14, minval = 1, title = "RSI Length", group = "RSI Settings")
+rsiSourceInput = input.source(close, "Source", group = "RSI Settings")
+ma11TypeInput = input.string("SMA", title = "MA Type", options = ["SMA", "Bollinger Bands", "EMA", "SMMA (RMA)", "WMA", "VWMA"], group = "MA Settings")
+ma11LengthInput = input.int(14, title = "MA Length", group = "MA Settings")
+bbMultInput = input.float(2.0, minval = 0.001, maxval = 50, title = "BB StdDev", group = "MA Settings")
+showDivergence = input.bool(false, title = "Show Divergence", group = "RSI Settings")
+
+up1 = ta.rma(math.max(ta.change(rsiSourceInput), 0), rsiLengthInput)
+down1 = ta.rma(-math.min(ta.change(rsiSourceInput), 0), rsiLengthInput)
+rsi = down1 == 0 ? 100 : up1 == 0 ? 0 : 100 - (100 / (1 + up1 / down))
+rsiMA = ma(rsi, ma11LengthInput, ma11TypeInput)
+isBB = ma11TypeInput == "Bollinger Bands"
+
+
+
+
+//True Strength Index
+long = input(title = "Long Length", defval = 25)
+short = input(title = "Short Length", defval = 13)
+signalx = input(title = "Signal Length", defval = 13)
+price = close
+
+double_smooth(src, long, short) =>
+	fist_smooth = ta.ema(src, long)
+	ta.ema(fist_smooth, short)
+
+pc = ta.change(price)
+
+double_smoothed_pc = double_smooth(pc, long, short)
+double_smoothed_abs_pc = double_smooth(math.abs(pc), long, short)
+tsi_value = 100 * (double_smoothed_pc / double_smoothed_abs_pc)
+
+
+
+
+//AWESOME OSCILLATOR
+fastperiod = input.int(5, title="fastperiod", minval=1, maxval=500)
+slowperiod = input.int(34, title="slowperiod", minval=1, maxval=500)
+signalperiod = input.int(7, title="signalperiod", minval=1, maxval=500)
+
+fastMA = ta.sma(hl2, fastperiod)
+slowMA = ta.sma(hl2, slowperiod)
+AO = fastMA - slowMA
+signal1 = ta.sma(AO, signalperiod)
+
+
+
+
+//Stocastic RSI
+smoothK = input.int(3, "K", minval=1)
+smoothD = input.int(3, "D", minval=1)
+lengthRSI = input.int(14, "RSI Length", minval=1)
+lengthStoch = input.int(14, "Stochastic Length", minval=1)
+src = input(close, title="RSI Source")
+
+rsi1 = ta.rsi(src, lengthRSI)
+k = ta.sma(ta.stoch(rsi1, rsi1, rsi1, lengthStoch), smoothK)
+d = ta.sma(k, smoothD)
+
+
+
+
+//Commodity Channel Index - CCI
+length357 = input.int(20, minval=1)
+src357 = input(hlc3, title="Source")
+ma357 = ta.sma(src357, length357)
+cci = (src357 - ma357) / (0.015 * ta.dev(src357, length357))
+
+ma357(source, length357, type) =>
+    switch type
+        "SMA" => ta.sma(source, length357)
+        "EMA" => ta.ema(source, length357)
+        "SMMA (RMA)" => ta.rma(source, length357)
+        "WMA" => ta.wma(source, length357)
+        "VWMA" => ta.vwma(source, length357)
+
+typeMA = input.string(title = "Method", defval = "SMA", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"], group="Smoothing")
+
+
+
+
+//MACD
+// Getting inputs
+fast_length2 = input(title = "Fast Length", defval = 12)
+slow_length2 = input(title = "Slow Length", defval = 26)
+src26 = input(title = "Source", defval = close)
+signal_length = input.int(title = "Signal Smoothing",  minval = 1, maxval = 50, defval = 9)
+sma_source = input.string(title = "Oscillator MA Type",  defval = "EMA", options = ["SMA", "EMA"])
+sma_signal = input.string(title = "Signal Line MA Type", defval = "EMA", options = ["SMA", "EMA"])
+
+// Calculating
+fast_ma2 = sma_source == "SMA" ? ta.sma(src26, fast_length2) : ta.ema(src26, fast_length2)
+slow_ma2 = sma_source == "SMA" ? ta.sma(src26, slow_length2) : ta.ema(src26, slow_length2)
+macd = fast_ma2 - slow_ma2
+signal = sma_signal == "SMA" ? ta.sma(macd, signal_length) : ta.ema(macd, signal_length)
+hist = macd - signal
+
+// Define buy and sell conditions
+buy_condition1 = ta.crossover(fast_ma2, slow_ma2)
+sell_condition1 = ta.crossunder(fast_ma2, slow_ma2)
+
+
+
+
+// ParabolicSAR
+start = input(0.02)
+increment = input(0.02)
+maximum = input(0.2, "Max Value")
+out = ta.sar(start, increment, maximum)
+
+
+
+
+//200 EMA
+len200 = input.int(200, minval = 1, title = "Length")
+src200 = input(close, title = "Source")
+offset200 = input.int(title = "Offset", defval = 0, minval = -500, maxval = 500)
+out200 = ta.ema(src200, len200)
+plot(out200, title = "EMA 200", color = color.rgb(255, 255, 0, 50), offset = offset200, linewidth = 2)
+
+ma20(source, length, type) =>
+    switch type
+        "SMA" => ta.sma(source, length)
+        "EMA" => ta.ema(source, length)
+        "SMMA (RMA)" => ta.rma(source, length)
+        "WMA" => ta.wma(source, length)
+        "VWMA" => ta.vwma(source, length)
+
+typeMA200 = input.string(title = "Method", defval = "SMA", options = ["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"], group = "Smoothing")
+
+
+
+
+//Triple Moving Averages
+len741 = input.int(9, title = "Length")
+len963 = input.int(13, title = "Length2")
+len852 = input.int(21, title = "Length3")
+
+src741 = input(close, title = "Source")
+src963 = input(close, title = "Source2")
+src852 = input(close, title = "Source3")
+
+out741 = ta.ema(src741, len741)
+out963 = ta.ema(src963, len963)
+out852 = ta.ema(src852, len852)
+
+
+
+
+//AlphaTrend
+coeff = input.float(1, 'Multiplier', step = 0.1)
+AP = input(14, 'Common Period')
+ATR = ta.sma(ta.tr, AP)
+src5 = input(close)
+showsignalsk = input(title = 'Show Signals?', defval = true)
+novolumedata = input(title = 'Change calculation (no volume data)?', defval = false)
+upT = low - ATR * coeff
+downT = high + ATR * coeff
+AlphaTrend = 0.0
+AlphaTrend := (novolumedata ? ta.rsi(src5, AP) >= 50 : ta.mfi(hlc3, AP) >= 50) ? upT < nz(AlphaTrend[1]) ? nz(AlphaTrend[1]) : upT : downT > nz(AlphaTrend[1]) ? nz(AlphaTrend[1]) : downT
+
+color1 = AlphaTrend > AlphaTrend[2] ? #00ff1100 : AlphaTrend < AlphaTrend[2] ? #ff001500 : AlphaTrend[1] > AlphaTrend[3] ? #00ff1100 : #ff001500
+k1 = plot(AlphaTrend, color = color.new(#ffffff, 100), linewidth = 1)
+k2 = plot(AlphaTrend[2], color = color.new(#ffffff, 100), linewidth = 1)
+
+fill(k1, k2, color = color1)
+
+buySignalk = ta.crossover(AlphaTrend, AlphaTrend[2])
+sellSignalk = ta.crossunder(AlphaTrend, AlphaTrend[2])
+
+K1 = ta.barssince(buySignalk)
+K2 = ta.barssince(sellSignalk)
+O1 = ta.barssince(buySignalk[1])
+O2 = ta.barssince(sellSignalk[1])
+
+plotshape(buySignalk and showsignalsk and O1 > K2 ? AlphaTrend[2] * 0.9999 : na, title = 'AT BUY', location = location.absolute, style = shape.triangleup, size = size.tiny, color = color.new(#00ff15, 0), textcolor = color.new(#00ff15, 0))
+plotshape(sellSignalk and showsignalsk and O2 > K1 ? AlphaTrend[2] * 1.0001 : na, title = 'AT SELL', location = location.absolute, style = shape.triangledown, size = size.tiny, color = color.new(#ff0000, 0), textcolor = color.new(#ff0000, 0))
+
+
+
+
+//Optimized Trend Tracker
+
+
+
+
+
+//QQE
+length97 = input.int(14, minval = 1)
+factor97 = input.float(4.236, minval = 0)
+smooth = input.int(5, minval = 1)
+weight = input.float(2)
+
+src97    = input(close)
+rsiCss = input(#005eff02, 'RSI', group = 'Style')
+
+tsBearCss = input(color.red, 'Trailing Stop', group = 'Style', inline = 'inline1')
+tsBullCss = input(color.teal, '', group = 'Style', inline = 'inline1')
+
+var ts = 0.
+var rsi97 = 0.
+
+delta = src97 - src97[1]
+w = nz(delta * (rsi97 - ts) > 0 ? weight : 1, 1)
+
+num = ta.rma(delta * w, length97)
+den97 = ta.rma(math.abs(delta * w), length97)
+rsi97 := 50 * ta.ema(num / den97, smooth) + 50
+
+diff = ta.rma(math.abs(rsi97 - rsi97[1]), length97)
+
+crossover = ta.crossover(rsi97, ts)
+crossunder = ta.crossunder(rsi97, ts)
+
+ts := nz(crossover ? rsi97 - diff * factor97
+  : crossunder ? rsi97 + diff * factor97
+  : rsi97 > ts ? math.max(rsi97 - diff * factor97, ts)
+  : math.min(rsi97 + diff * factor97, ts), rsi97)
+
+css = rsi > ts ? tsBullCss : tsBearCss
+
+
+
+
+//Superlchi
+tenkan_len  = input(9, 'Tenkan          ', inline = 'tenkan')
+tenkan_mult = input(2., '',inline = 'tenkan')
+kijun_len   = input(26, 'Kijun             ', inline = 'kijun')
+kijun_mult  = input(4., '',inline = 'kijun')
+spanB_len   = input(52, 'Senkou Span B ', inline = 'span')
+spanB_mult  = input(6., '',inline = 'span')
+offset      = input(26, 'Displacement')
+
+avg(src, length, mult) =>
+    atr = ta.atr(length) * mult
+    up = hl2 + atr
+    dn = hl2 - atr
+    upper = 0.,lower = 0.
+    upper := src[1] < upper[1] ? math.min(up,upper[1]) : up
+    lower := src[1] > lower[1] ? math.max(dn,lower[1]) : dn
+    
+    os = 0,max = 0.,min = 0.
+    os := src > upper ? 1 : src < lower ? 0 : os[1]
+    spt = os == 1 ? lower : upper
+    max := ta.cross(src,spt) ? math.max(src,max[1]) : os == 1 ? math.max(src,max[1]) : spt
+    min := ta.cross(src,spt) ? math.min(src,min[1]) : os == 0 ? math.min(src,min[1]) : spt
+    math.avg(max,min)
+
+tenkan = avg(close, tenkan_len, tenkan_mult)
+kijun = avg(close, kijun_len, kijun_mult)
+senkouA = math.avg(kijun, tenkan)
+senkouB = avg(close, spanB_len, spanB_mult)
+
+
+
+
+//SuperTrend
+atrPeriod = input.int(10,    "ATR Length", minval = 1)
+factor =    input.float(3.0, "Factor",     minval = 0.01, step = 0.01)
+
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+
+supertrend := barstate.isfirst ? na : supertrend
+upTrend =    plot(direction < 0 ? supertrend : na, "Up Trend",   color = color.rgb(76, 175, 79, 99), style = plot.style_linebr)
+downTrend =  plot(direction < 0 ? na : supertrend, "Down Trend", color = color.rgb(255, 82, 82, 99),   style = plot.style_linebr)
+bodyMiddle = plot(barstate.isfirst ? na : (open + close) / 2, "Body Middle",display = display.none)
+
+
+
+
+//chandelier Exit
+var string calcGroup = 'Calculation'
+length2 = input.int(title = 'ATR Period', defval = 22, group = calcGroup)
+mult2 = input.float(title = 'ATR Multiplier', step = 0.1, defval = 3.0, group = calcGroup)
+useClose = input.bool(title = 'Use Close Price for Extremums', defval = true, group = calcGroup)
+
+var string visualGroup = 'Visuals'
+showLabels = input.bool(title = 'Show Buy/Sell Labels', defval = true, group = visualGroup)
+highlightState = input.bool(title = 'Highlight State', defval = true, group = visualGroup)
+
+var string alertGroup = 'Alerts'
+awaitBarConfirmation = input.bool(title = "Await Bar Confirmation", defval = true, group = alertGroup)
+
+atr = mult2 * ta.atr(length2)
+
+longStop = (useClose ? ta.highest(close, length2) : ta.highest(length2)) - atr
+longStopPrev = nz(longStop[1], longStop)
+longStop := close[1] > longStopPrev ? math.max(longStop, longStopPrev) : longStop
+
+shortStop = (useClose ? ta.lowest(close, length2) : ta.lowest(length2)) + atr
+shortStopPrev = nz(shortStop[1], shortStop)
+shortStop := close[1] < shortStopPrev ? math.min(shortStop, shortStopPrev) : shortStop
+
+var int dir = 1
+dir := close > shortStopPrev ? 1 : close < longStopPrev ? -1 : dir
+
+var color longColor = color.rgb(0, 255, 8, 99)
+var color shortColor = color.rgb(255, 0, 0, 99)
+var color longFillColor = color.new(#00ff08, 100)
+var color shortFillColor = color.new(#ff0000, 100)
+var color textColor = color.new(color.white, 0)
+
+longStopPlot = plot(dir == 1 ? longStop : na, title = 'Long Stop', style = plot.style_linebr, linewidth = 1, color = color.new(longColor, 0))
+buySignal = dir == 1 and dir[1] == -1
+plotshape(buySignal ? longStop : na, title = 'Long Stop Start', location = location.absolute, style = shape.triangleup, size = size.tiny, color = color.new(longColor, 0))
+
+shortStopPlot = plot(dir == 1 ? na : shortStop, title = 'Short Stop', style = plot.style_linebr, linewidth = 1, color = color.new(shortColor, 0))
+sellSignal = dir == -1 and dir[1] == 1
+plotshape(sellSignal ? shortStop : na, title = 'Short Stop Start', location = location.absolute, style = shape.triangledown, size = size.tiny, color = color.new(shortColor, 0))
+
+midPricePlot = plot(ohlc4, title = '', style = plot.style_circles, linewidth = 0, display = display.none, editable = false)
+
+longStateFillColor = highlightState ? dir == 1 ? longFillColor : na : na
+shortStateFillColor = highlightState ? dir == -1 ? shortFillColor : na : na
+
+
+
+
+//pivot point supertend
+prd = input.int(defval = 2, title = "Pivot Point Period", minval = 1, maxval = 50)
+Factor=input.float(defval = 3, title = "ATR Factor", minval = 1, step = 0.1)
+Pd=input.int(defval = 10, title = "ATR Period", minval = 1)
+showpivot = input(defval = false, title = "Show Pivot Points")
+showlabel = input(defval = true, title = "Show Buy/Sell Labels")
+showcl = input(defval = false, title = "Show PP Center Line")
+showsr = input(defval = false, title = "Show Support/Resistance")
+
+// get Pivot High/Low
+ph = ta.pivothigh(prd, prd)
+pl = ta.pivotlow(prd, prd)
+
+// draw Pivot Points if "showpivot" is enabled
+plotshape(ph and showpivot, text = "H",  style = shape.labeldown, color = na, textcolor = color.rgb(255, 0, 0), location = location.abovebar, transp = 0, offset = -prd)
+plotshape(pl and showpivot, text = "L",  style = shape.labeldown, color = na, textcolor = color.rgb(0, 255, 8), location = location.belowbar, transp = 0, offset = -prd)
+
+// calculate the Center line using pivot points
+var float center = na
+lastpp = ph ? ph : pl ? pl : na
+if (lastpp)
+    if (na(center))
+        center := lastpp
+    else
+        //weighted calculation
+        center := (center * 2 + lastpp) / 3
+
+// upper/lower bands calculation
+Up = center - (Factor * ta.atr(Pd))
+Dn = center + (Factor * ta.atr(Pd))
+
+// get the trend
+var float TUp = na
+var float TDown = na
+Trend = 0
+TUp := close[1] > TUp[1] ? math.max(Up, TUp[1]) : Up
+TDown := close[1] < TDown[1] ? math.min(Dn, TDown[1]) : Dn
+Trend := close > TDown[1] ? 1: close < TUp[1]? -1: nz(Trend[1], 1)
+Trailingsl = Trend == 1 ? TUp : TDown
+
+// plot the trend
+linecolor = Trend == 1 and nz(Trend[1]) == 1 ? color.rgb(0, 255, 0, 75) : Trend == -1 and nz(Trend[1]) == -1 ? color.rgb(255, 0, 0, 75) : na
+plot(Trailingsl, color = linecolor ,  linewidth = 2, title = "PP SuperTrend")
+ 
+plot(showcl ? center : na, color = showcl ? center < hl2 ? color.rgb(33, 149, 243, 97) : color.rgb(255, 0, 0) : na)
+
+// check and plot the signals
+bsignal = Trend == 1 and Trend[1] == -1
+ssignal = Trend == -1 and Trend[1] == 1
+plotshape(bsignal and showlabel ? Trailingsl : na, title = "Buy", location = location.absolute, style = shape.triangleup, size = size.tiny, color = color.rgb(0, 255, 0), textcolor = color.black, transp = 0)
+plotshape(ssignal and showlabel ? Trailingsl : na, title = "Sell", location = location.absolute, style = shape.triangledown, size = size.tiny, color = color.rgb(255, 0, 0), textcolor = color.white, transp = 0)
+
+//get S/R levels using Pivot Points
+float resistance = na
+float support = na
+support := pl ? pl : support[1]
+resistance := ph ? ph : resistance[1]
+
+// if enabled then show S/R levels
+plot(showsr and support ? support : na, color = showsr and support ? color.rgb(0, 255, 8) : na, style = plot.style_circles, offset = -prd)
+plot(showsr and resistance ? resistance : na, color = showsr and resistance ? color.rgb(255, 0, 0) : na, style = plot.style_circles, offset = -prd)
+
+
+
+
+//-----------------------------------------------------Table--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+// Define table parameters
+Table_Def = table.new(position = position.top_right, columns = 3, rows = 20, frame_color = color.rgb(255, 255, 255, 75), frame_width = 1, border_color = color.rgb(255, 255, 255, 90), border_width = 2, bgcolor = color.rgb(0, 0, 50))
+
+table.merge_cells(Table_Def, start_column = 1, start_row = 0, end_column = 2, end_row = 0)
+table.merge_cells(Table_Def, start_column = 1, start_row = 1, end_column = 2, end_row = 1)
+table.merge_cells(Table_Def, start_column = 1, start_row = 2, end_column = 2, end_row = 2)
+
+table.cell(Table_Def, column = 1, row = 0, text = str.tostring(adx) , bgcolor = color.rgb(255, 255, 255, 75), text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column = 1, row = 1, text = str.tostring(longstoploss_level) , bgcolor = color.rgb(255, 255, 255, 75), text_color = color.rgb(255, 255, 255), text_size = size.small)
+table.cell(Table_Def, column = 1, row = 2, text = str.tostring(shortstoploss_level) , bgcolor = color.rgb(255, 255, 255, 75), text_color = color.rgb(255, 255, 255), text_size = size.small)
+
+table.cell(Table_Def, column =  0, row = 1, text =  "   Buy StopLoss  ", text_color = color.rgb(255, 255, 255), text_size = size.small)
+table.cell(Table_Def, column =  0, row = 2, text =  "Sell StopLoss", text_color = color.rgb(255, 255, 255), text_size = size.small)
+table.cell(Table_Def, column =  1, row = 3, text =  "   Long   ", bgcolor = color.rgb(0, 225, 0), text_size = size.small)
+table.cell(Table_Def, column =  2, row = 3, text =  "  Short  ", bgcolor = color.rgb(225, 0, 0), text_size = size.small)
+table.cell(Table_Def, column =  0, row = 4, text =  "DMI", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 5, text =  "RSI", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 6, text = "TSI", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 7, text =  "Stoch.RSI", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 8, text =  "CCI", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 9, text =  "MACD", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 10, text =  "P. SAR", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 11, text = "200 EMA", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 12, text = "TEMA", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 13, text = "AT", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 14, text = "QQE", text_color = color.white, text_size = size.small)
+table.cell(Table_Def, column =  0, row = 15, text = "Superlchi", text_color = color.white, text_size = size.small)
+
+
+if adx > 25
+    table.cell(Table_Def, column =  0, row = 0, text =  "ADX Strong", text_color = color.rgb(0, 255, 8), text_size = size.small)
+else
+    table.cell(Table_Def, column =  0, row = 0, text =  "ADX Weak", text_color = color.rgb(255, 0, 0), text_size = size.small)
+
+
+if  plus > minus
+    table.cell(Table_Def, column =  1, row = 4, text =  "🟢", text_color = color.rgb(0, 255, 8), text_size = size.small)
+else 
+    table.cell(Table_Def, column =  2, row = 4, text =  "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+
+
+if rsi > rsiMA
+    table.cell(Table_Def, column =  1, row = 5, text =  "🟢", text_color = color.rgb(0, 255, 8), text_size = size.small)
+else
+    table.cell(Table_Def, column =  2, row = 5, text =  "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+
+
+Long_Condition1 = 0 > tsi_value and tsi_value > signalx
+Long_Condition2 = 0 > AO  and AO > signal1
+Short_Condition1 = signalx > tsi_value and tsi_value > 0
+Short_Condition2 = signal1 > AO and AO > 0
+
+if  Long_Condition1 and Long_Condition2
+    table.cell(Table_Def, column = 1, row = 6, text = "🟢", text_color = color.rgb(0, 255, 8), text_size = size.small)
+else if Short_Condition1 and Short_Condition2
+    table.cell(Table_Def, column = 2, row = 6, text = "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+else
+    table.cell(Table_Def, column = 1, row = 6, text = "", text_size = size.small)
+
+
+if 20 > k and k > d
+    table.cell(Table_Def, column = 1, row = 7, text = "🟢", text_color = color.rgb(0, 255, 0), text_size = size.small)
+else if d > k and k > 80
+    table.cell(Table_Def, column = 2, row = 7, text = "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+else
+    table.cell(Table_Def, column = 1, row = 7, text = "", text_size = size.small)
+
+
+if cci < -100
+    table.cell(Table_Def, column = 1, row = 8, text = "🟢", text_color = color.rgb(0, 255, 0), text_size = size.small)
+else if cci > 100
+    table.cell(Table_Def, column = 2, row = 8, text = "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+else
+    table.cell(Table_Def, column = 1, row = 8, text = "", text_size = size.small)
+
+
+if 0 > macd and macd > signal
+    table.cell(Table_Def, column = 1, row = 9, text = "🟢", text_color = color.rgb(0, 255, 0), text_size = size.small)
+else if signal > macd and macd > 0
+    table.cell(Table_Def, column = 2, row = 9, text = "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+else
+    table.cell(Table_Def, column = 1, row = 9, text = "", text_size = size.small)
+
+
+if close > out
+    table.cell(Table_Def, column =  1, row = 10, text =  "🟢", text_color = color.rgb(0, 255, 8), text_size = size.small)
+else
+    table.cell(Table_Def, column =  2, row = 10, text =  "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+
+
+if close > out200
+    table.cell(Table_Def, column =  1, row = 11, text =  "🟢", text_color = color.rgb(0, 255, 8), text_size = size.small)
+else
+    table.cell(Table_Def, column =  2, row = 11, text =  "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+
+
+if out852 < out963 and out963 < out741
+    table.cell(Table_Def, column = 1, row = 12, text = "🟢", text_color = color.rgb(0, 255, 0), text_size = size.small)
+else if out852 > out963 and out963 > out741
+    table.cell(Table_Def, column = 2, row = 12, text = "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+else
+    table.cell(Table_Def, column = 1, row = 12, text = "", text_size = size.small)
+
+
+if AlphaTrend > AlphaTrend[2]
+    table.cell(Table_Def, column = 1, row = 13, text = "🟢", text_color = color.rgb(0, 255, 0), text_size = size.small)
+else if AlphaTrend < AlphaTrend[2]
+    table.cell(Table_Def, column = 2, row = 13, text = "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+else
+    table.cell(Table_Def, column = 1, row = 13, text = "", text_size = size.small)
+
+
+if  rsi97 > ts
+    table.cell(Table_Def, column = 1, row = 14, text = "🟢", text_color = color.rgb(0, 255, 8), text_size = size.small)
+else if rsi97 < ts
+    table.cell(Table_Def, column = 2, row = 14, text = "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+else
+    table.cell(Table_Def, column = 1, row = 14, text = "", text_size = size.small)
+
+
+if  kijun > tenkan
+    table.cell(Table_Def, column = 1, row = 15, text = "🟢", text_color = color.rgb(0, 255, 8), text_size = size.small)
+else if tenkan > kijun
+    table.cell(Table_Def, column = 2, row = 15, text = "🔴", text_color = color.rgb(255, 0, 0), text_size = size.small)
+else
+    table.cell(Table_Def, column = 1, row = 15, text = "", text_size = size.small)
+
+
+
+
+
+
+
+
+//---------------------------------------------------------Alert Buy & Sell -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//UT Bot Alert
+a = input(2, title="Key Value. 'This changes the sensitivity'")
+c = input(1, title="ATR Period")
+h = input(false, title="Signals from Heikin Ashi Candles")
+
+xATR = ta.atr(c)
+nLoss = a * xATR
+
+src05 = h ? request.security(syminfo.tickerid, "D", close) : close
+
+var float xATRTrailingStop = na
+xATRTrailingStop := src05 > xATRTrailingStop[1] and src05[1] > xATRTrailingStop[1] ? math.max(xATRTrailingStop[1], src05 - nLoss) : src05 < xATRTrailingStop[1] and src05[1] < xATRTrailingStop[1] ? math.min(xATRTrailingStop[1], src05 + nLoss) : src05 > xATRTrailingStop[1] ? src05 - nLoss : src05 + nLoss
+
+var bool pos = na
+pos := src05[1] < xATRTrailingStop[1] and src05 > xATRTrailingStop[1] ? true : src05[1] > xATRTrailingStop[1] and src05 < xATRTrailingStop[1] ? false : na(pos[1])
+
+xcolor = pos ? color.rgb(0, 255, 0) : color.rgb(255, 0, 0)
+
+ema = ta.ema(src05, 1)
+above = ta.crossover(ema, xATRTrailingStop)
+below = ta.crossunder(ema, xATRTrailingStop)
+
+buy = src05 > xATRTrailingStop and above
+sell = src05 < xATRTrailingStop and below
+
+barbuy = src05 > xATRTrailingStop
+barsell = src05 < xATRTrailingStop
+
+plotshape(buy, title="Buy", text = "Buy", location=location.belowbar, textcolor=color.rgb(0, 255, 0), size = size.small)
+plotshape(sell, title="Sell", text = "Sell", location=location.abovebar, textcolor=color.rgb(255, 0, 0), size = size.small)
+
+
+
+
+//EMA Cross
+// Define input parameters
+fast_length = input(10, title="Fast MA Length")
+slow_length = input(50, title="Slow MA Length")
+src1 = input(close, title="Source")
+
+// Calculate moving averages
+fast_ma = ta.sma(src1, fast_length)
+slow_ma = ta.sma(src1, slow_length)
+
+// Define buy and sell conditions
+buy_condition = ta.crossover(fast_ma, slow_ma)
+sell_condition = ta.crossunder(fast_ma, slow_ma)
+
+// Plot buy and sell signals
+plotshape(buy_condition, text = "🟩", location = location.belowbar, color= color.rgb(0, 255, 0))
+plotshape(sell_condition, text = "🟥", location = location.abovebar, color= color.rgb(255, 0, 0))
+
+
+
+
+//Nadaraya Whatson Envolope
+//Settings
+h1 = input.float(8.,'Bandwidth', minval = 0)
+mult1 = input.float(3., minval = 0)
+src789 = input(close, 'Source')
+
+repaint = input(true, 'Repainting Smoothing', tooltip = 'Repainting is an effect where the indicators historical output is subject to change over time. Disabling repainting will cause the indicator to output the endpoints of the calculations')
+
+//Style
+upCss = input.color(color.rgb(0, 255, 0, 70), 'Colors', inline = 'inline1', group = 'Style')
+dnCss = input.color(color.rgb(255, 0, 0, 70), '', inline = 'inline1', group = 'Style')
+
+//Functions
+//Gaussian window
+gauss(x, h1) => math.exp(-(math.pow(x, 2)/(h1 * h1 * 2)))
+
+//Append lines
+n1 = bar_index
+
+var ln = array.new_line(0) 
+
+if barstate.isfirst and repaint
+    for i = 0 to 499
+        array.push(ln,line.new(na,na,na,na))
+
+//End point method
+var coefs = array.new_float(0)
+var den = 0.
+
+if barstate.isfirst and not repaint
+    for i = 0 to 499
+        w = gauss(i, h1)
+        coefs.push(w)
+
+    den := coefs.sum()
+
+out789 = 0.
+if not repaint
+    for i = 0 to 499
+        out789 += src789[i] * coefs.get(i)
+out789 /= den
+mae = ta.sma(math.abs(src789 - out789), 499) * mult1
+
+upper1 = out789 + mae
+lower1 = out789 - mae
+ 
+//Compute and display NWE
+float y2 = na
+float y1 = na
+
+nwe = array.new<float>(0)
+if barstate.islast and repaint
+    sae = 0.
+    //Compute and set NWE point 
+    for i = 0 to math.min(499,n1 - 1)
+        sum = 0.
+        sumw = 0.
+        //Compute weighted mean 
+        for j = 0 to math.min(499,n1 - 1)
+            w = gauss(i - j, h1)
+            sum += src789[j] * w
+            sumw += w
+
+        y2 := sum / sumw
+        sae += math.abs(src789[i] - y2)
+        nwe.push(y2)
+    
+    sae := sae / math.min(499,n1 - 1) * mult1
+    for i = 0 to math.min(499,n1 - 1)
+        if i%2
+            line.new(n1-i+1, y1 + sae, n1-i, nwe.get(i) + sae, color = upCss)
+            line.new(n1-i+1, y1 - sae, n1-i, nwe.get(i) - sae, color = dnCss)
+        
+        if src789[i] > nwe.get(i) + sae and src789[i+1] < nwe.get(i) + sae
+            label.new(n1-i, src789[i], '🔴', color = color(na), style = label.style_label_down, textcolor = dnCss, textalign = text.align_center)
+        if src789[i] < nwe.get(i) - sae and src789[i+1] > nwe.get(i) - sae
+            label.new(n1-i, src789[i], '🟢', color = color(na), style = label.style_label_up, textcolor = upCss, textalign = text.align_center)
+        
+        y1 := nwe.get(i)
+
+//Dashboard
+var tb1 = table.new(position.top_right, 1, 1
+  , bgcolor = #1e222d
+  , border_color = #373a46
+  , border_width = 1
+  , frame_color = #373a46
+  , frame_width = 1)
+
+if repaint
+    tb1.cell(0, 0, 'Repainting Mode Enabled', text_color = color.white, text_size = size.small)
+
+//Crossing Arrows
+plotshape(ta.crossunder(close, out789 - mae) ? low : na, "Crossunder", shape.triangleup, location.absolute, color(na), 0 , text = 'N', textcolor = upCss, size = size.tiny)
+plotshape(ta.crossover(close, out789 + mae) ? high : na, "Crossover", shape.triangledown, location.absolute, color(na), 0 , text = "N", textcolor = dnCss, size = size.tiny)
+
+
+
+
